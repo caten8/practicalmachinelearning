@@ -1,33 +1,200 @@
 ---
-title: "Practical Machine Learning Course Project"
+title: "Machine Learning: Dumbbell Biceps Curl"
 author: "Marc Durbin"
 date: "August 14, 2016"
 output: 
   html_document: 
-    fig_caption: yes
     keep_md: yes
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r ref.label="dataDownload", echo=FALSE, warning=FALSE}
+if(!file.exists("./data")){dir.create("./data")}
+fileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+fileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"	
+download.file(fileUrl, destfile = "./data/training.csv", method = "curl")	
+download.file(fileUrl, destfile = "./data/testing.csv", method = "curl")
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r ref.label="readData", echo=FALSE, warning=FALSE}
+training <- read.csv("data/training.csv", na.strings=c("NA","#DIV/0!", ""))
+testing <- read.csv("data/testing.csv", na.strings=c("NA","#DIV/0!", ""))
 ```
 
-## Including Plots
+## Executive Summary
 
-You can also embed plots, for example:
+A Random Forest model classifies data correctly on 20 unknown test cases. Tests with 30 variables achieve a greater than 99% prediction accuracy.
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+## Background
+
+Using devices such as *Jawbone Up, Nike FuelBand,* and *Fitbit* it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, our goal is to use data from accelerometers on the belt, forearm, arm, and dumbbell of six participants who were asked to perform dumbbell lifts correctly and incorrectly in five different ways. More information is available on the Groupware site: [Human Activity Recognition](http://groupware.les.inf.puc-rio.br/har).
+
+
+## Building the Model(s)
+
+Two models were built, a simple classification algorithm using the LDA method to get a quick look at prediction accuracy and a more complicated multiple technique using the Random Forest method. 
+
+
+## Cross Validation
+
+Data were grouped into five subgroups using one as the hold-out group while using the other four to train the model. The results were then aggregated to come up with an estimate of the out-of-sample error.
+
+
+## Out-of-Sample Error Expectations
+
+For our model to perform reliably we need a greater than 95% accuracy to get 20 out of 20. At that level the probability is $0.95^{20} = 0.36$. At 99% it is 0.8. Given the accuracy level achieved via cross-validation against multiple folds, we expect the out-of-sample error rate to be less than 1%. We therefore estimate with 0.936 probability that we can correctly classify all 20.
+
+```{r depVar, echo=FALSE, warning=FALSE, eval=FALSE}
+Count <- table(training$classe)
+Percentage <- paste(round(Count / sum(Count),2) * 100,"%",sep="")
+aFrame <- rbind(Count,Percentage)
+kable(aFrame)
+countsByname <- table(training$classe,training$user_name)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r, echo=FALSE, warning=FALSE, eval=FALSE}
+barplot(countsByname,
+        xlab = "Subject",
+        ylab = "Frequency",
+        legend=rownames(countsByname),
+        main="Exercise Quality by Subject",
+        beside=TRUE
+        )
+```
+
+## LDA Model 
+
+Using k-fold cross validation with five folds.
+
+```{r ref.label="buildModel1", echo=FALSE, warning=FALSE}
+# run LDA model 
+```
+
+LDA Model accuracy overall is 75%, ranging from 67% to 85% in sensitivity. 
+
+
+## RF Model 
+
+Again, as with LDA, using k-fold cross validation with five folds. 
+
+```{r ref.label="useParallel", echo=FALSE, warning=FALSE, eval=FALSE}
+# setup parallel processing
+```
+
+```{r ref.label="buildModel2", echo=FALSE, warning=FALSE}
+# run RF model 
+```
+
+The second algorithm -- the RF Model -- produces reliable results with 30 predictors, reaching an accuracy of 99.5%. 
+
+```{r plotRFAccuracy, echo=FALSE, warning=FALSE, eval=FALSE}
+plot(modFit2,
+     main="Accuracy by Predictor Count")
+```
+
+```{r plotErr, echo=FALSE, warning=FALSE, eval=FALSE}
+plot(modFit2$finalModel,main="Error by Fold: Random Forest Model")
+
+```
+
+```{r varImp, echo=FALSE, warning=FALSE, eval=FALSE}
+varImpPlot(modFit2$finalModel,
+           main="Variable Importance Plot: Random Forest",
+           type=2)
+```
+
+## Results
+
+The second model using the Random Forest method accurately predicts nearly all of the test cases. The error rate is less than 1%, yielding a .936 probability that the model can classify all 20.  
+
+
+## Appendix
+
+```{r dataDownload, echo=FALSE, warning=FALSE, eval=FALSE}
+theFiles <- c("pml-testing.csv","pml-training.csv")
+theDirectory <- "./data/"
+dlMethod <- "curl"
+if(substr(Sys.getenv("OS"),1,7) == "Windows") dlMethod <- "wininet"
+if(!dir.exists(theDirectory)) dir.create(theDirectory)
+for (i in 1:length(theFiles)) {
+     aFile <- paste(theDirectory,theFiles[i],sep="")
+     if (!file.exists(aFile)) {
+          url <- paste("https://d396qusza40orc.cloudfront.net/predmachlearn/",
+                       theFiles[i],
+                       sep="")
+          download.file(url,destfile=aFile,
+                        method=dlMethod,
+                        mode="w") # use mode "w" for text 
+     }
+}
+```
+
+
+```{r readData, echo=FALSE, warning=FALSE, eval=FALSE}
+library(lattice)
+library(MASS)
+library(ggplot2)
+library(grid)
+library(readr)
+library(knitr)
+library(caret)
+library(YaleToolkit)
+string40 <-  "ncnnccnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+string80 <-  "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+string120 <- "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+string160 <- "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnc"
+colString <- paste(string40,string80,string120,string160,sep="")
+
+validation <- readr::read_csv("./data/pml-testing.csv",
+     col_names=TRUE,
+     col_types=colString)
+originalData <- readr::read_csv("./data/pml-training.csv",
+     col_names=TRUE,
+     col_types=colString)
+# fix missing colunm name for "observation / row number"
+theColNames <- colnames(originalData)
+theColNames[1] <- "obs"
+colnames(originalData) <- theColNames
+
+originalData$classe <- as.factor(originalData$classe)
+valResult <- whatis(originalData)
+# retain all columns with fewer than 50 missing values
+theNames <- as.character(valResult[valResult$missing < 50 & valResult$variable.name != "obs",1])
+originalSubset <- originalData[,theNames]
+# remove date variables and binary window 
+originalSubset <- originalSubset[c(-2,-3,-4,-5)]
+# valSubset <- whatis(originalSubset)
+set.seed(102134)
+trainIndex <- createDataPartition(originalSubset$classe,p=.60,list=FALSE)
+training <- originalSubset[trainIndex,]
+testing <- originalSubset[-trainIndex,]
+```
+
+```{r useParallel, echo=FALSE, warning=FALSE, eval=FALSE}
+library(iterators)
+library(parallel)
+library(foreach)
+library(doParallel)
+cluster <- makeCluster(detectCores())
+registerDoParallel(cluster)
+```
+
+```{r buildModel1, echo=TRUE, warning=FALSE,eval=FALSE}
+yvars <- training[,55]
+xvars <- training[,-55]
+# LDA Model 1
+mod1Control <- trainControl(method="cv",number=5,allowParallel=TRUE)
+modFit1 <- train(classe ~ .,data=training,method="lda",trControl=mod1Control)
+pred1 <- predict(modFit1,training)
+confusionMatrix(pred1,training$classe)
+```
+
+```{r buildModel2, echo=TRUE, warning=FALSE, eval=FALSE}
+# RF Model 2
+mod2Control <- trainControl(method="cv",number=5,allowParallel=TRUE)
+modFit2 <- train(classe ~ .,data=training,method="rf",trControl=mod2Control)
+print(modFit2)
+pred2 <- predict(modFit2,training)
+confusionMatrix(pred2,training$classe)
+predicted_test <- predict(modFit2,testing)
+confusionMatrix(predicted_test,testing$classe)
+```
